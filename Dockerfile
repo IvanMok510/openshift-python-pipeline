@@ -1,28 +1,25 @@
 FROM nginx:mainline-alpine
 
-# --- Python Installation ---
-RUN apk add --no-cache python3 && \
-    python3 -m ensurepip && \
-    rm -r /usr/lib/python*/ensurepip && \
-    pip3 install --upgrade pip setuptools && \
-    if [ ! -e /usr/bin/pip ]; then ln -s pip3 /usr/bin/pip ; fi && \
-    if [[ ! -e /usr/bin/python ]]; then ln -sf /usr/bin/python3 /usr/bin/python; fi && \
-    rm -r /root/.cache
+# Install Python and dependencies
+RUN apk add --no-cache python3 py3-pip && \
+    python3 -m venv /app/venv && \
+    /app/venv/bin/pip install --no-cache-dir --upgrade pip setuptools
 
-# --- Work Directory ---
-WORKDIR /usr/src/app
+# Set working directory
+WORKDIR /app
 
-# --- Python Setup ---
-ADD . .
-RUN pip install -r app/requirements.pip
+# Copy application code and requirements
+COPY app/requirements.pip .
+COPY app .
 
-# --- Nginx Setup ---
-COPY config/nginx/default.conf /etc/nginx/conf.d/
-RUN chmod g+rwx /var/cache/nginx /var/run /var/log/nginx
-RUN chgrp -R root /var/cache/nginx
-RUN sed -i.bak 's/^user/#user/' /etc/nginx/nginx.conf
-RUN addgroup nginx root
+# Install Python dependencies in virtual environment
+RUN /app/venv/bin/pip install --no-cache-dir -r requirements.pip
 
-# --- Expose and CMD ---
-EXPOSE 8081
-CMD gunicorn --bind 0.0.0.0:5000 wsgi --chdir /usr/src/app/app & nginx -g "daemon off;"
+# Copy NGINX configuration
+COPY config /etc/nginx
+
+# Expose port
+EXPOSE 8080
+
+# Start NGINX and Gunicorn
+CMD ["sh", "-c", "nginx && /app/venv/bin/gunicorn -b 0.0.0.0:8080 main:app"]
